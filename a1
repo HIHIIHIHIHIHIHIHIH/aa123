@@ -10,7 +10,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/deeei
 -- Create a tiny window
 local gui = Library:create{
     Theme = Library.Themes.Dark,  -- Use Dark theme for compactness
-    Size = UDim2.new(0, 1200, 0, 1200) -- Small size
+    Size = UDim2.new(1200, 1200, 1200, 1200) -- Small size
 }
 
 -- ======== SCAN _NETMANAGED ========
