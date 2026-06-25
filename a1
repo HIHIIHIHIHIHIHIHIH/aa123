@@ -1,0 +1,190 @@
+--[[
+    Tiny Remote Spammer using Kav UI Library
+    - Dropdown to select one remote
+    - Toggle "Spam All" to spam all remotes at once
+    - Compact size & draggable on mobile
+]]
+
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/kav"))()
+
+-- Create the window with a small size
+local Window = Library.CreateLib("🚀 Spammer", "DarkTheme")
+
+-- Resize the window to be tinier (the library's main frame is stored in Window.Frame)
+if Window.Frame then
+    Window.Frame.Size = UDim2.new(0, 280, 0, 220)
+    -- Center it on screen
+    Window.Frame.Position = UDim2.new(0.5, -140, 0.5, -110)
+end
+
+local MainTab = Window:NewTab("Spam")
+local RemoteSection = MainTab:NewSection("Remote")
+local ControlSection = MainTab:NewSection("Control")
+
+-- ======== SCAN _NETMANAGED ========
+local function getNetManaged()
+    local path = game:GetService("ReplicatedStorage"):FindFirstChild("rbxts_include")
+        and game:GetService("ReplicatedStorage").rbxts_include:FindFirstChild("node_modules")
+        and game:GetService("ReplicatedStorage").rbxts_include.node_modules:FindFirstChild("@rbxts")
+        and game:GetService("ReplicatedStorage").rbxts_include.node_modules["@rbxts"]:FindFirstChild("net")
+        and game:GetService("ReplicatedStorage").rbxts_include.node_modules["@rbxts"].net:FindFirstChild("out")
+        and game:GetService("ReplicatedStorage").rbxts_include.node_modules["@rbxts"].net.out:FindFirstChild("_NetManaged")
+    return path
+end
+
+local NetManaged = getNetManaged()
+local Remotes = {}
+local RemoteNames = {}
+
+if NetManaged then
+    for _, child in ipairs(NetManaged:GetChildren()) do
+        if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
+            table.insert(Remotes, child)
+            table.insert(RemoteNames, child.Name)
+        end
+    end
+else
+    warn("_NetManaged folder not found!")
+    RemoteNames = {"Not Found"}
+end
+
+if #RemoteNames == 0 then
+    RemoteNames = {"No remotes"}
+end
+
+-- ======== DROPDOWN ========
+local SelectedRemote = nil
+if #Remotes > 0 then
+    SelectedRemote = Remotes[1]
+end
+
+local dropdown = RemoteSection:NewDropdown(
+    "Select Remote",
+    "Pick one remote to spam",
+    RemoteNames,
+    function(selectedName)
+        for _, r in ipairs(Remotes) do
+            if r.Name == selectedName then
+                SelectedRemote = r
+                break
+            end
+        end
+    end
+)
+
+-- ======== SPAM ALL TOGGLE ========
+local spamAll = false
+local allToggle = ControlSection:NewToggle(
+    "Spam All",
+    "Spam every remote in the folder",
+    function(state)
+        spamAll = state
+        if state then
+            print("Spamming ALL remotes")
+        else
+            print("Spamming selected remote only")
+        end
+    end
+)
+
+-- ======== ENABLE SPAM TOGGLE ========
+getgenv().SpamEnabled = false
+local enableToggle = ControlSection:NewToggle(
+    "Enable Spam",
+    "Start/stop spamming",
+    function(state)
+        getgenv().SpamEnabled = state
+        if state then
+            print("Spam started")
+        else
+            print("Spam stopped")
+        end
+    end
+)
+
+-- ======== REFRESH BUTTON ========
+ControlSection:NewButton(
+    "⟳ Refresh",
+    "Rescan _NetManaged",
+    function()
+        NetManaged = getNetManaged()
+        if NetManaged then
+            Remotes = {}
+            RemoteNames = {}
+            for _, child in ipairs(NetManaged:GetChildren()) do
+                if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
+                    table.insert(Remotes, child)
+                    table.insert(RemoteNames, child.Name)
+                end
+            end
+            if #RemoteNames == 0 then
+                RemoteNames = {"No remotes"}
+            end
+            dropdown:Refresh(RemoteNames)
+            if #Remotes > 0 then
+                SelectedRemote = Remotes[1]
+            else
+                SelectedRemote = nil
+            end
+            print("Refreshed: " .. #Remotes .. " remotes found")
+        else
+            warn("_NetManaged not found!")
+        end
+    end
+)
+
+-- ======== STATUS LABEL (button acting as status) ========
+local statusBtn = ControlSection:NewButton(
+    "Status: Idle",
+    "Current spam state",
+    function() end
+)
+
+-- ======== SPAM LOOP ========
+local function spamLoop()
+    while true do
+        task.wait(0.01) -- adjust for speed
+        if getgenv().SpamEnabled then
+            if spamAll then
+                -- Spam all remotes
+                for _, r in ipairs(Remotes) do
+                    if r:IsA("RemoteEvent") then
+                        r:FireServer() -- no args
+                    elseif r:IsA("RemoteFunction") then
+                        r:InvokeServer() -- no args
+                    end
+                end
+            else
+                -- Spam only selected
+                if SelectedRemote then
+                    if SelectedRemote:IsA("RemoteEvent") then
+                        SelectedRemote:FireServer()
+                    elseif SelectedRemote:IsA("RemoteFunction") then
+                        SelectedRemote:InvokeServer()
+                    end
+                end
+            end
+        end
+    end
+end
+
+coroutine.wrap(spamLoop)()
+
+-- ======== UPDATE STATUS ========
+game:GetService("RunService").RenderStepped:Connect(function()
+    local statusText = "Status: "
+    if not getgenv().SpamEnabled then
+        statusText = statusText .. "Idle"
+    elseif spamAll then
+        statusText = statusText .. "SPAMMING ALL (" .. #Remotes .. " remotes)"
+    elseif SelectedRemote then
+        statusText = statusText .. "SPAMMING " .. SelectedRemote.Name
+    else
+        statusText = statusText .. "No remote"
+    end
+    statusBtn:UpdateButton(statusText)
+end)
+
+-- ======== MOBILE DRAGGING ========
+-- The library already supports dragging via the title bar on all devices.
+-- No extra code needed.
