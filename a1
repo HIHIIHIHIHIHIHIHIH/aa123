@@ -1,25 +1,17 @@
 --[[
-    Tiny Remote Spammer using Kav UI Library
+    Tiny Remote Spammer using Mercury UI Library
     - Dropdown to select one remote
-    - Toggle "Spam All" to spam all remotes at once
-    - Compact size & draggable on mobile
+    - Toggle "Spam All" to spam all remotes
+    - Compact & draggable
 ]]
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/kav"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/deeeity/mercury-lib/master/src.lua"))()
 
--- Create the window with a small size
-local Window = Library.CreateLib("🚀 Spammer", "DarkTheme")
-
--- Resize the window to be tinier (the library's main frame is stored in Window.Frame)
-if Window.Frame then
-    Window.Frame.Size = UDim2.new(0, 280, 0, 220)
-    -- Center it on screen
-    Window.Frame.Position = UDim2.new(0.5, -140, 0.5, -110)
-end
-
-local MainTab = Window:NewTab("Spam")
-local RemoteSection = MainTab:NewSection("Remote")
-local ControlSection = MainTab:NewSection("Control")
+-- Create a tiny window
+local gui = Library:create{
+    Theme = Library.Themes.Dark,  -- Use Dark theme for compactness
+    Size = UDim2.new(0, 280, 0, 200) -- Small size
+}
 
 -- ======== SCAN _NETMANAGED ========
 local function getNetManaged()
@@ -43,14 +35,17 @@ if NetManaged then
             table.insert(RemoteNames, child.Name)
         end
     end
-else
-    warn("_NetManaged folder not found!")
-    RemoteNames = {"Not Found"}
 end
 
 if #RemoteNames == 0 then
-    RemoteNames = {"No remotes"}
+    RemoteNames = {"No remotes found"}
 end
+
+-- ======== CREATE TAB ========
+local tab = gui:tab{
+    Icon = "rbxassetid://6034996695",
+    Name = "Spammer"
+}
 
 -- ======== DROPDOWN ========
 local SelectedRemote = nil
@@ -58,55 +53,50 @@ if #Remotes > 0 then
     SelectedRemote = Remotes[1]
 end
 
-local dropdown = RemoteSection:NewDropdown(
-    "Select Remote",
-    "Pick one remote to spam",
-    RemoteNames,
-    function(selectedName)
+local dropdown = tab:dropdown({
+    Name = "Select Remote",
+    Description = "Pick one remote to spam",
+    StartingText = #Remotes > 0 and RemoteNames[1] or "None",
+    Items = RemoteNames,
+    Callback = function(v)
         for _, r in ipairs(Remotes) do
-            if r.Name == selectedName then
+            if r.Name == v then
                 SelectedRemote = r
                 break
             end
         end
+        gui:set_status("Selected: " .. (SelectedRemote and SelectedRemote.Name or "none"))
     end
-)
+})
 
 -- ======== SPAM ALL TOGGLE ========
 local spamAll = false
-local allToggle = ControlSection:NewToggle(
-    "Spam All",
-    "Spam every remote in the folder",
-    function(state)
-        spamAll = state
-        if state then
-            print("Spamming ALL remotes")
-        else
-            print("Spamming selected remote only")
-        end
+tab:toggle({
+    Name = "Spam All",
+    Description = "Spam every remote in the folder",
+    Default = false,
+    Callback = function(v)
+        spamAll = v
+        gui:set_status(spamAll and "Spamming ALL remotes" or "Spamming selected remote")
     end
-)
+})
 
 -- ======== ENABLE SPAM TOGGLE ========
 getgenv().SpamEnabled = false
-local enableToggle = ControlSection:NewToggle(
-    "Enable Spam",
-    "Start/stop spamming",
-    function(state)
-        getgenv().SpamEnabled = state
-        if state then
-            print("Spam started")
-        else
-            print("Spam stopped")
-        end
+tab:toggle({
+    Name = "Enable Spam",
+    Description = "Start/stop spamming",
+    Default = false,
+    Callback = function(v)
+        getgenv().SpamEnabled = v
+        gui:set_status(v and "SPAMMING" or "Idle")
     end
-)
+})
 
 -- ======== REFRESH BUTTON ========
-ControlSection:NewButton(
-    "⟳ Refresh",
-    "Rescan _NetManaged",
-    function()
+tab:button({
+    Name = "⟳ Refresh",
+    Callback = function()
         NetManaged = getNetManaged()
         if NetManaged then
             Remotes = {}
@@ -118,27 +108,40 @@ ControlSection:NewButton(
                 end
             end
             if #RemoteNames == 0 then
-                RemoteNames = {"No remotes"}
+                RemoteNames = {"No remotes found"}
             end
+            -- Update dropdown
             dropdown:Refresh(RemoteNames)
             if #Remotes > 0 then
                 SelectedRemote = Remotes[1]
             else
                 SelectedRemote = nil
             end
-            print("Refreshed: " .. #Remotes .. " remotes found")
+            gui:set_status("Refreshed: " .. #Remotes .. " remotes")
         else
-            warn("_NetManaged not found!")
+            gui:set_status("_NetManaged not found!")
         end
     end
-)
+})
 
--- ======== STATUS LABEL (button acting as status) ========
-local statusBtn = ControlSection:NewButton(
-    "Status: Idle",
-    "Current spam state",
-    function() end
-)
+-- ======== STATUS DISPLAY (using a button as status) ========
+-- Mercury doesn't have a label, so we'll use a button
+local statusBtn = tab:button({
+    Name = "Status: Idle",
+    Callback = function() end -- no action
+})
+
+-- Update status button text
+local function updateStatus(text)
+    statusBtn:Set(text)
+end
+
+-- Override gui:set_status to also update the button
+local originalSetStatus = gui.set_status
+gui.set_status = function(self, text)
+    originalSetStatus(self, text)
+    statusBtn:Set("Status: " .. text)
+end
 
 -- ======== SPAM LOOP ========
 local function spamLoop()
@@ -170,21 +173,5 @@ end
 
 coroutine.wrap(spamLoop)()
 
--- ======== UPDATE STATUS ========
-game:GetService("RunService").RenderStepped:Connect(function()
-    local statusText = "Status: "
-    if not getgenv().SpamEnabled then
-        statusText = statusText .. "Idle"
-    elseif spamAll then
-        statusText = statusText .. "SPAMMING ALL (" .. #Remotes .. " remotes)"
-    elseif SelectedRemote then
-        statusText = statusText .. "SPAMMING " .. SelectedRemote.Name
-    else
-        statusText = statusText .. "No remote"
-    end
-    statusBtn:UpdateButton(statusText)
-end)
-
--- ======== MOBILE DRAGGING ========
--- The library already supports dragging via the title bar on all devices.
--- No extra code needed.
+-- ======== INITIAL STATUS ========
+gui:set_status("Ready - " .. #Remotes .. " remotes found")
